@@ -27,6 +27,12 @@ typedef struct {
     int pc;         // program pozisyonunu tutan degisken
     int sp;         // stack pozisyonunu tutan degisken
     int fp;         // goreceli pozisyonlama icin kullanilan cercevenin pozisyonunu tutan degisken
+                    // genel olarak fonksiyon cagirirken pushlanan degiskenleri offset vererek
+                    // okuyabilmek icin kullanilir ve degeri bir fonksiyon tam cagrilirken ki
+                    // stack pointer degerini tutan degiskendir.
+                    // ---> DIKKAT makina dili calistiran uygulamalarda kodlama 
+                    // matiginda fonksiyon yok mantiksal olarak X bir indexten baslayip bir yere kadar
+                    // giden kod bolgesi fonksiyon oluyor.
 } C42VM;
 
 C42VM* newC42VM(int* code,    // calistirilacak bytecode'larin bulundugu dizinin referansi
@@ -60,9 +66,9 @@ enum {
     JMPT = 8,       // eger true ise dallan
     JMPF = 9,       // eger false ise dallan
     CONST_I32 = 10,  // tam sayi degeri stacke koy
-    LLOAD = 11,      // lokal verilerden yukle
+    LOAD_PARAM = 11,      // lokal verilerden yukle
     GLOAD = 12,     // global verilerden yukle
-    LSTORE = 13,     // lokal veriyi global verilere sakla
+    STORE_PARAM = 13,     // lokal veriyi global verilere sakla
     GSTORE = 14,    // global memory alanina sakla
     PRINT = 15,     // stackin en tepesindeki sayiyi ekrana yazdir
     POP = 16,       // stackin en disindaki sayiyi cikart ( ama kullanmadan )
@@ -75,23 +81,38 @@ enum {
 #define S_POP(vm)     vm->stack[vm->sp--]     // stackin tepesinden bir deger al
 #define NEXT_BYTE_CODE(vm)   vm->code[vm->pc++]      // siradaki bytecode degerini oku ( bytecode bir komut, deger ya da referans olabilir illa ki komut olmak zorunda degil ! )
 
+void printStack(C42VM* vm, int activePC, int isBeforeOpcode) {
+    printf("\n");
+    if (isBeforeOpcode == 1) {
+        printf("****************************************\n");
+    }
+    printf("\n");
+    printf(isBeforeOpcode == 1 ? "BEFORE EXECUTION\n" : "AFTER EXECUTION\n");
+    printf("\n");
+    printf("vm->pc -> %d\n", activePC);
+    printf("vm->sp -> %d\n", vm->sp);
+    printf("vm->fp -> %d\n", vm->fp);
+    printf("\n");
+    printf("----- STACK BEGIN -----\n");
+    for (int i = 0; i <= vm->sp; i++) {
+        printf("i : %d, value : %d\n", i, vm->stack[i]);
+    }
+    printf("----- STACK END -------\n");
+    printf("\n");
+    if (isBeforeOpcode == 0) {
+        printf("****************************************\n");
+    }
+    printf("\n");
+}
+
 void runVM(C42VM* vm){
     do{
-        int activePC = vm->pc;
-        int opcode = NEXT_BYTE_CODE(vm);        // bir bytecode oku
+        int previousPC = vm->pc;
+        int opcode = NEXT_BYTE_CODE(vm);  // bir bytecode oku
+        // bu noktada vm->pc 1 artmis oldu !!!
         int v, addr, offset, a, b, argc, rval, temp;
         
-        printf("\n");
-        printf("----- STACK BEGIN -----\n");
-        printf("vm->pc -> %d\n", activePC);
-        printf("vm->sp -> %d\n", vm->sp);
-        printf("vm->fp -> %d\n", vm->fp);
-        printf("\n");
-        for (int i = 0; i <= vm->sp; i++) {
-            printf("i : %d, value : %d\n", i, vm->stack[i]);
-        }
-        printf("----- STACK END -------\n");
-        printf("\n");
+        printStack(vm, previousPC, 1);
 
         switch (opcode) {   // kodu biz yazdigimiz icin mantiken bu bytecode bir komuttur ve switch icerisinde ilgilenen ilgilendigi degeri okuma islemini ayrica yapacak
             case EXIT: 
@@ -101,6 +122,7 @@ void runVM(C42VM* vm){
                 v = NEXT_BYTE_CODE(vm);   // bu islem siradaki bytecode degerini okur
                 printf("CONST_I32 v -> %d\n", v);
                 S_PUSH(vm, v);     // ... ve stack'in en tepesine koyar
+                printStack(vm, vm->pc, 0);
                 break;
             case ADD_I32:
                 b = S_POP(vm);        // bu islem stackin en tepesinden degeri okur ( stack 1 geri gider )
@@ -118,7 +140,6 @@ void runVM(C42VM* vm){
             case JMPT:
                 addr = NEXT_BYTE_CODE(vm);  // siradaki bytecode degerini okur ( bu deger ziplanacak adrestir )
                 a = S_POP(vm);
-                printf("JMPT addr -> %d a -> %d\n", addr, a);
                 if(a) {      // ... stackin en tepesindeki degeri cikartir ve kontrol eder
                     vm->pc = addr; // ... eger kontrol dogru ise verilen adrese ziplar
                 }
@@ -143,6 +164,7 @@ void runVM(C42VM* vm){
                 a = S_POP(vm);        // stackin en tepesinden degeri okur ( stack 1 geri gider )
                 printf("SQUARE_I32 a -> %d\n", a);
                 S_PUSH(vm, a * a);    // okunan degerin karesi alinir ve bulunan deger stacke eklenir
+                printStack(vm, vm->pc, 0);
                 break;                
             case GLOAD:
                 addr = S_POP(vm);             // siradaki bytecode degerini okur ( bu deger bir adrestir )
@@ -159,41 +181,45 @@ void runVM(C42VM* vm){
                 a = S_POP(vm);        // stackin en tepesinden 1. degeri okur ( stack 1 geri gider )
                 printf("EQ_I32 a -> %d b -> %d\n", a, b);
                 S_PUSH(vm, a == b ? 1 : 0);    // ... 2 degerin esitligini kontrol eder ve sonucu stackin en tepesine koyariz
+                printStack(vm, vm->pc, 0);
                 break;
-            case LLOAD:                  // lokal bir degeri ( ya da diger adiya fonksiyon degiskenini okuruz )
-                offset = NEXT_BYTE_CODE(vm);     // fonksiyonlara aktarilan degerleri okumak icin cerceve adresinden yararlaniyoruz ve cerceveye gore offseti siraki bytecode olarak okuruz
+            case LOAD_PARAM:                            // lokal bir degeri ( ya da diger adiya fonksiyon degiskenini okuruz )
+                offset = NEXT_BYTE_CODE(vm);            // fonksiyonlara aktarilan degerleri okumak icin cerceve adresinden yararlaniyoruz ve cerceveye gore offseti siraki bytecode olarak okuruz
                 printf("LLOAD offset -> %d vm->stack[vm->fp+offset] -> %d\n", offset, vm->stack[vm->fp+offset]);
-                S_PUSH(vm, vm->stack[vm->fp+offset]); // ... fonksiyon parametresinin degerini cerceve adresi + offset yardimi ile okuruz ve stackin en tepesine koyariz ( cunku stack islemler stack uzerinden gidiyor... )
+                S_PUSH(vm, vm->stack[vm->fp+offset]);   // ... fonksiyon parametresinin degerini cerceve adresi + offset yardimi ile okuruz ve stackin en tepesine koyariz ( cunku stack islemler stack uzerinden gidiyor... )
+                printStack(vm, vm->pc, 0);
                 break;
-            case LSTORE:                 // lokal bir degeri ya da fonksiyon parametresinin degerini global data alaninda sakla
-                v = S_POP(vm);            // stackin en tepesindeki degeri okuruz
-                offset = NEXT_BYTE_CODE(vm);     // ... cerceve icinde yer alan globale saklamak istedigimiz adres konumunu okuruz
-                vm->heap[vm->fp+offset] = v;  // ... cerceve adresi yardimi ile bu fonksiyon parametresinin degerini stackten okunan deger ile guncelleriz
+            case STORE_PARAM:                   // lokal bir degeri ya da fonksiyon parametresinin degerini global data alaninda sakla
+                v = S_POP(vm);                  // stackin en tepesindeki degeri okuruz
+                offset = NEXT_BYTE_CODE(vm);    // ... cerceve icinde yer alan globale saklamak istedigimiz adres konumunu okuruz
+                vm->heap[vm->fp+offset] = v;    // ... cerceve adresi yardimi ile bu fonksiyon parametresinin degerini stackten okunan deger ile guncelleriz
                 break;
             case EXEC_ROUTINE:
                 // bir fonksyion cagrilirken butun parametrelerin set edilmesi gerekiyor ( aslinda fonksiyon cagirmiyoruz bir adrese atliyoruz yani kavramsal olarak sanki fonksiyon cagirmis gibi oluyoruz )
-                addr = NEXT_BYTE_CODE(vm); // atlanacak fonksiyonun adresini bytecode olarak okuruz ...
-                argc = NEXT_BYTE_CODE(vm); // ... cagrilacak fonksiyonun bekledigi parametre adedini bytecode olarak okuruz ...
-                S_PUSH(vm, argc);   // ... parametre adedini stacke koyariz ...
-                S_PUSH(vm, vm->fp); // ... o anki cercevenin adresini saklariz ( cagrilacak fonksiyonun cercevesi degil yani !! ) ...
-                S_PUSH(vm, vm->pc); // ... o anki program adim degerini adresini saklariz ...
+                addr = NEXT_BYTE_CODE(vm);  // atlanacak fonksiyonun adresini bytecode olarak okuruz ...
+                argc = NEXT_BYTE_CODE(vm);  // ... cagrilacak fonksiyonun bekledigi parametre adedini bytecode olarak okuruz ...
+                S_PUSH(vm, argc);           // ... parametre adedini stacke koyariz ...
+                S_PUSH(vm, vm->fp);         // ... bir onceki cercevenin adresini saklariz ( cagrilacak fonksiyonun cercevesi degil yani !! ) ...
+                S_PUSH(vm, vm->pc);         // ... o anki program adim degerini adresini saklariz ...
                 printf("EXEC_ROUTINE addr -> %d argc -> %d vm->fp -> %d vm->pc -> %d\n", addr, argc, vm->fp, vm->pc);
                 vm->fp = vm->sp;  // ... yeni cercevenin adresini guncelleriz ( cerceve stack'in fonksiyon cagrilirken tuttugu adres degeridir ) ...
                                   // ... bu noktada onemli detay su, vm->sp aktarilan parametreler kadar ilerlemis oluyor yani 2 parametre pushlamis isek
                                   // ... cagrilacak metodu bu 2 parametre cagrilan metod sonrasi temizlenmeli aksi takdirde programin stackinde kalir
                                   // ... ve gereksiz yer isgal eder ve ayrica programin akisinin bozulmasina neden olur
                 vm->pc = addr;    // ... program adim degerini fonksiyonun adresi ile guncelleriz ( yani teknik olarak cagirmis oluyoruz bu sayede sihir gibi di mi ? )
+                printStack(vm, vm->pc, 0);
                 break;
             case RETURN:
-                rval = S_POP(vm);     // stackin en tepesinde geri donulecek deger vardir ve bunu okuruz
-                vm->sp = vm->fp;    // ... aktif fonksiyon cagrilmadan onceki stack adimina geceriz ( yani stack fonksiyon cagrilirken kullanilan adet kadar geri gider )
+                rval = S_POP(vm);       // stackin en tepesinde geri donulecek deger vardir ve bunu okuruz
+                vm->sp = vm->fp;        // ... aktif fonksiyon cagrilmadan onceki stack adimina geceriz ( yani stack fonksiyon cagrilirken kullanilan adet kadar geri gider )
                 printf("RETURN vm->fp -> %d\n", vm->fp);
-                vm->pc = S_POP(vm);   // ... aktif fonksiyon cagrilmadan onceki program adim degerini stackten okuruz ve yeni program adim degeri olarak set ederiz ( yani teknik olarak aktif fonksiyonun cagrildigi noktaya donmus olduk ) ...
-                vm->fp = S_POP(vm);   // ... bir onceki cerceve adresini stackten okuruz ...
-                argc = S_POP(vm);     // ... donulen fonksiyonun parametre adedini stackten okuruz ...
-                S_POP(vm);   // ... stack adim degerini parametre adedi kadar geri iteriz ...
-                temp = S_PUSH(vm, rval);     // ... donulecek degeri stacke pushlariz ( kodu biz yazdigimiz icin stackteki bu geri donus degerinin yonetimiz bizde yani ihtiyac duymuyorsak mutlaka stackten cikarmaliyiz yoksa sonraki islemlerde karisikliga neden olur )
+                vm->pc = S_POP(vm);     // ... aktif fonksiyon cagrilmadan onceki program adim degerini stackten okuruz ve yeni program adim degeri olarak set ederiz ( yani teknik olarak aktif fonksiyonun cagrildigi noktaya donmus olduk ) ...
+                vm->fp = S_POP(vm);     // ... bir onceki cerceve adresini stackten okuruz ...
+                argc = S_POP(vm);       // ... donulen fonksiyonun parametre adedini stackten okuruz ...
+                temp = S_POP(vm);              // ... stack adim degerini parametre adedi kadar geri iteriz ...
+                S_PUSH(vm, rval);     // ... donulecek degeri stacke pushlariz ( kodu biz yazdigimiz icin stackteki bu geri donus degerinin yonetimiz bizde yani ihtiyac duymuyorsak mutlaka stackten cikarmaliyiz yoksa sonraki islemlerde karisikliga neden olur )
                 printf("RETURN rval -> %d vm->sp -> %d vm->fp -> %d argc -> %d\n", rval, vm->sp, vm->fp, argc);
+                printStack(vm, vm->pc, 0);
                 break;
             case POP:
                 --vm->sp;      // stacki 1 geri iter ve o anki deger ne ise gormezden gelinir
@@ -202,6 +228,7 @@ void runVM(C42VM* vm){
                 v = S_POP(vm);        // stackin en tepesindeki degeri okuruz
                 printf("PRINT v -> %d\n", v);  // ... ve ekrana bastiririz
                 S_PUSH(vm, v);
+                printStack(vm, vm->pc, 0);
                 break;
             default:
                 break;
@@ -217,7 +244,7 @@ int main() {
         PRINT,
         EXIT,
         // 2 sayinin karesini alip donen metod
-        LLOAD, -3, // bu metoda aktarilmak istenen degeri stackin en tepesine kopyalayip ekliyoruz
+        LOAD_PARAM, -3, // bu metoda aktarilmak istenen degeri stackin en tepesine kopyalayip ekliyoruz
         SQUARE_I32,
         RETURN,
         // main burasi
