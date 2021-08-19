@@ -77,9 +77,10 @@ enum {
     RETURN = 19       // fonksiyondan donus yap
 };
 
-#define S_PUSH(vm, v) vm->stack[++vm->sp] = v // stackin tepesine bir deger koy ( C derlenirken kodlarda S_PUSH olan yere arka planda "vm->stack[++vm->sp] = v" yazar )
-#define S_POP(vm)     vm->stack[vm->sp--]     // stackin tepesinden bir deger al
-#define NEXT_BYTE_CODE(vm)   vm->code[vm->pc++]      // siradaki bytecode degerini oku ( bytecode bir komut, deger ya da referans olabilir illa ki komut olmak zorunda degil ! )
+#define S_PUSH(vm, v) vm->stack[++vm->sp] = v       // stackin tepesine bir deger koy ( C derlenirken kodlarda S_PUSH olan yere arka planda "vm->stack[++vm->sp] = v" yazar )
+                                                    // DIKKAT --> "++vm->sp" su demek once vm->sp'nin degerini 1 arttir ve vm->stack[NN] icinde o yeni deger ile kullan.
+#define S_POP(vm)     vm->stack[vm->sp--]           // stackin tepesinden bir deger al
+#define NEXT_BYTE_CODE(vm)   vm->code[vm->pc++]     // siradaki bytecode degerini oku ( bytecode bir komut, deger ya da referans olabilir illa ki komut olmak zorunda degil ! )
 
 void printStack(C42VM* vm, int activePC, int isBeforeOpcode) {
     printf("\n");
@@ -202,8 +203,9 @@ void runVM(C42VM* vm){
                 S_PUSH(vm, vm->fp);         // ... bir onceki cercevenin adresini saklariz ( cagrilacak fonksiyonun cercevesi degil yani !! ) ...
                 S_PUSH(vm, vm->pc);         // ... o anki program adim degerini adresini saklariz ...
                 printf("EXEC_ROUTINE addr -> %d argc -> %d vm->fp -> %d vm->pc -> %d\n", addr, argc, vm->fp, vm->pc);
-                vm->fp = vm->sp;  // ... yeni cercevenin adresini guncelleriz ( cerceve stack'in fonksiyon cagrilirken tuttugu adres degeridir ) ...
-                                  // ... bu noktada onemli detay su, vm->sp aktarilan parametreler kadar ilerlemis oluyor yani 2 parametre pushlamis isek
+                // DIKKAT bu noktada vm->sp 3 index artmis oldu 3 kez S_PUSH cagirdigimiz icin
+                vm->fp = vm->sp;  // ... yeni cercevenin adresini atiyoruz ( cerceve stack'in fonksiyon cagrilirken tuttugu adres degeridir ) ...
+                                  // ... bu noktada onemli detay su, vm->sp degeri aktarilan parametreler kadar ilerlemis oluyor yani 2 parametre pushlamis isek
                                   // ... cagrilacak metodu bu 2 parametre cagrilan metod sonrasi temizlenmeli aksi takdirde programin stackinde kalir
                                   // ... ve gereksiz yer isgal eder ve ayrica programin akisinin bozulmasina neden olur
                 vm->pc = addr;    // ... program adim degerini fonksiyonun adresi ile guncelleriz ( yani teknik olarak cagirmis oluyoruz bu sayede sihir gibi di mi ? )
@@ -212,6 +214,8 @@ void runVM(C42VM* vm){
             case RETURN:
                 rval = S_POP(vm);       // stackin en tepesinde geri donulecek deger vardir ve bunu okuruz
                 vm->sp = vm->fp;        // ... aktif fonksiyon cagrilmadan onceki stack adimina geceriz ( yani stack fonksiyon cagrilirken kullanilan adet kadar geri gider )
+                                        // EXEC_ROUTINE icine baktiginizda "vm->fp = vm->sp" kodunu goreceksiniz yani tam bu return edilen metod cagrilmadan onceki vm->sp
+                                        // degeri vm->fp ye aktariliyor yani parametre degerleri + stack'e sakladigimiz state'lerin hemen sonrasina donuyor stack pointer.
                 printf("RETURN vm->fp -> %d\n", vm->fp);
                 vm->pc = S_POP(vm);     // ... aktif fonksiyon cagrilmadan onceki program adim degerini stackten okuruz ve yeni program adim degeri olarak set ederiz ( yani teknik olarak aktif fonksiyonun cagrildigi noktaya donmus olduk ) ...
                 vm->fp = S_POP(vm);     // ... bir onceki cerceve adresini stackten okuruz ...
