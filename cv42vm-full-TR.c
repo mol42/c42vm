@@ -21,7 +21,7 @@
 #define STACK_SIZE 100
 
 typedef struct {
-    int* heap;    // stack disinda tutulacak datalarin baslangic adresi ( pointer )
+    int* heap;      // stack disinda tutulacak datalarin baslangic adresi ( pointer )
     int* code;      // calistirilacak kodlarin arrayine ait referans ( pointer )
     int* stack;     // yaratilan stackin baslangic adresini tutan referans ( pointer )
     int pc;         // program pozisyonunu tutan degisken
@@ -35,9 +35,9 @@ typedef struct {
                     // giden kod bolgesi fonksiyon oluyor.
 } C42VM;
 
-C42VM* newC42VM(int* code,    // calistirilacak bytecode'larin bulundugu dizinin referansi
-    int pc,             // baslangic program pozisyonu, ilk calistirilacak kodun pozisyonu
-    int heapMemorySize) {      // lokal data ( stack disindaki data ) icin belirlenen boyut
+C42VM* newC42VM(int* code,      // calistirilacak bytecode'larin bulundugu dizinin referansi
+    int pc,                     // baslangic program pozisyonu, ilk calistirilacak kodun pozisyonu
+    int heapMemorySize) {       // lokal data ( stack disindaki data ) icin belirlenen boyut
     C42VM* vm = (C42VM*)malloc(sizeof(C42VM));
     vm->code = code;
     vm->pc = pc;
@@ -73,7 +73,7 @@ enum {
     PRINT = 15,     // stackin en tepesindeki sayiyi ekrana yazdir
     POP = 16,       // stackin en disindaki sayiyi cikart ( ama kullanmadan )
     EXIT = 17,      // programi durdur
-    EXEC_ROUTINE = 18,  // bir programcik calistir ( verilen fonksyionu calistir )
+    EXECUTE_FUNCTION = 18,  // bir programcik calistir ( verilen fonksyionu calistir )
     RETURN = 19       // fonksiyondan donus yap
 };
 
@@ -195,14 +195,14 @@ void runVM(C42VM* vm){
                 offset = NEXT_BYTE_CODE(vm);    // ... cerceve icinde yer alan globale saklamak istedigimiz adres konumunu okuruz
                 vm->heap[vm->fp+offset] = v;    // ... cerceve adresi yardimi ile bu fonksiyon parametresinin degerini stackten okunan deger ile guncelleriz
                 break;
-            case EXEC_ROUTINE:
+            case EXECUTE_FUNCTION:
                 // bir fonksyion cagrilirken butun parametrelerin set edilmesi gerekiyor ( aslinda fonksiyon cagirmiyoruz bir adrese atliyoruz yani kavramsal olarak sanki fonksiyon cagirmis gibi oluyoruz )
                 addr = NEXT_BYTE_CODE(vm);  // atlanacak fonksiyonun adresini bytecode olarak okuruz ...
                 argc = NEXT_BYTE_CODE(vm);  // ... cagrilacak fonksiyonun bekledigi parametre adedini bytecode olarak okuruz ...
                 S_PUSH(vm, argc);           // ... parametre adedini stacke koyariz ...
                 S_PUSH(vm, vm->fp);         // ... bir onceki cercevenin adresini saklariz ( cagrilacak fonksiyonun cercevesi degil yani !! ) ...
                 S_PUSH(vm, vm->pc);         // ... o anki program adim degerini adresini saklariz ...
-                printf("EXEC_ROUTINE addr -> %d argc -> %d vm->fp -> %d vm->pc -> %d\n", addr, argc, vm->fp, vm->pc);
+                printf("EXECUTE_FUNCTION addr -> %d argc -> %d vm->fp -> %d vm->pc -> %d\n", addr, argc, vm->fp, vm->pc);
                 // DIKKAT bu noktada vm->sp 3 index artmis oldu 3 kez S_PUSH cagirdigimiz icin
                 vm->fp = vm->sp;  // ... yeni cercevenin adresini atiyoruz ( cerceve stack'in fonksiyon cagrilirken tuttugu adres degeridir ) ...
                                   // ... bu noktada onemli detay su, vm->sp degeri aktarilan parametreler kadar ilerlemis oluyor yani 2 parametre pushlamis isek
@@ -214,7 +214,7 @@ void runVM(C42VM* vm){
             case RETURN:
                 rval = S_POP(vm);       // stackin en tepesinde geri donulecek deger vardir ve bunu okuruz
                 vm->sp = vm->fp;        // ... aktif fonksiyon cagrilmadan onceki stack adimina geceriz ( yani stack fonksiyon cagrilirken kullanilan adet kadar geri gider )
-                                        // EXEC_ROUTINE icine baktiginizda "vm->fp = vm->sp" kodunu goreceksiniz yani tam bu return edilen metod cagrilmadan onceki vm->sp
+                                        // EXECUTE_FUNCTION icine baktiginizda "vm->fp = vm->sp" kodunu goreceksiniz yani tam bu return edilen metod cagrilmadan onceki vm->sp
                                         // degeri vm->fp ye aktariliyor yani parametre degerleri + stack'e sakladigimiz state'lerin hemen sonrasina donuyor stack pointer.
                 printf("RETURN vm->fp -> %d\n", vm->fp);
                 vm->pc = S_POP(vm);     // ... aktif fonksiyon cagrilmadan onceki program adim degerini stackten okuruz ve yeni program adim degeri olarak set ederiz ( yani teknik olarak aktif fonksiyonun cagrildigi noktaya donmus olduk ) ...
@@ -244,7 +244,7 @@ void runVM(C42VM* vm){
 int main() {
     int program[] = {
         CONST_I32, 7, // cagrilacak metoda aktarilacak parametre degeri
-        EXEC_ROUTINE, 7, 1,
+        EXECUTE_FUNCTION, 7, 1,
         PRINT,
         EXIT,
         // 2 sayinin karesini alip donen metod
