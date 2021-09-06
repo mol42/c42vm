@@ -81,14 +81,17 @@ enum {
                                                     // DIKKAT --> "++vm->sp" su demek once vm->sp'nin degerini 1 arttir ve vm->stack[NN] icinde o yeni deger ile kullan.
 #define S_POP(vm)     vm->stack[vm->sp--]           // stackin tepesinden bir deger al
 #define NEXT_BYTE_CODE(vm)   vm->code[vm->pc++]     // siradaki bytecode degerini oku ( bytecode bir komut, deger ya da referans olabilir illa ki komut olmak zorunda degil ! )
+#define TRUE 1
+#define FALSE 0
+
 
 void printStack(C42VM* vm, int activePC, int isBeforeOpcode) {
     printf("\n");
-    if (isBeforeOpcode == 1) {
+    if (isBeforeOpcode == TRUE) {
         printf("****************************************\n");
     }
     printf("\n");
-    printf(isBeforeOpcode == 1 ? "BEFORE EXECUTION\n" : "AFTER EXECUTION\n");
+    printf(isBeforeOpcode == TRUE ? "BEFORE EXECUTION\n" : "AFTER EXECUTION\n");
     printf("\n");
     printf("vm->pc -> %d\n", activePC);
     printf("vm->sp -> %d\n", vm->sp);
@@ -100,7 +103,7 @@ void printStack(C42VM* vm, int activePC, int isBeforeOpcode) {
     }
     printf("----- STACK END -------\n");
     printf("\n");
-    if (isBeforeOpcode == 0) {
+    if (isBeforeOpcode == FALSE) {
         printf("****************************************\n");
     }
     printf("\n");
@@ -113,7 +116,7 @@ void runVM(C42VM* vm){
         // bu noktada vm->pc 1 artmis oldu !!!
         int v, addr, offset, a, b, argc, rval, temp;
         
-        printStack(vm, previousPC, 1);
+        printStack(vm, previousPC, TRUE);
 
         switch (opcode) {   // kodu biz yazdigimiz icin mantiken bu bytecode bir komuttur ve switch icerisinde ilgilenen ilgilendigi degeri okuma islemini ayrica yapacak
             case EXIT: 
@@ -123,7 +126,7 @@ void runVM(C42VM* vm){
                 v = NEXT_BYTE_CODE(vm);   // bu islem siradaki bytecode degerini okur
                 printf("CONST_I32 v -> %d\n", v);
                 S_PUSH(vm, v);     // ... ve stack'in en tepesine koyar
-                printStack(vm, vm->pc, 0);
+                printStack(vm, vm->pc, FALSE);
                 break;
             case ADD_I32:
                 b = S_POP(vm);        // bu islem stackin en tepesinden degeri okur ( stack 1 geri gider )
@@ -165,7 +168,7 @@ void runVM(C42VM* vm){
                 a = S_POP(vm);        // stackin en tepesinden degeri okur ( stack 1 geri gider )
                 printf("SQUARE_I32 a -> %d\n", a);
                 S_PUSH(vm, a * a);    // okunan degerin karesi alinir ve bulunan deger stacke eklenir
-                printStack(vm, vm->pc, 0);
+                printStack(vm, vm->pc, FALSE);
                 break;                
             case GLOAD:
                 addr = S_POP(vm);             // siradaki bytecode degerini okur ( bu deger bir adrestir )
@@ -182,13 +185,13 @@ void runVM(C42VM* vm){
                 a = S_POP(vm);        // stackin en tepesinden 1. degeri okur ( stack 1 geri gider )
                 printf("EQ_I32 a -> %d b -> %d\n", a, b);
                 S_PUSH(vm, a == b ? 1 : 0);    // ... 2 degerin esitligini kontrol eder ve sonucu stackin en tepesine koyariz
-                printStack(vm, vm->pc, 0);
+                printStack(vm, vm->pc, FALSE);
                 break;
             case LOAD_PARAM:                            // lokal bir degeri ( ya da diger adiya fonksiyon degiskenini okuruz )
                 offset = NEXT_BYTE_CODE(vm);            // fonksiyonlara aktarilan degerleri okumak icin cerceve adresinden yararlaniyoruz ve cerceveye gore offseti siraki bytecode olarak okuruz
                 printf("LLOAD offset -> %d vm->stack[vm->fp+offset] -> %d\n", offset, vm->stack[vm->fp+offset]);
                 S_PUSH(vm, vm->stack[vm->fp+offset]);   // ... fonksiyon parametresinin degerini cerceve adresi + offset yardimi ile okuruz ve stackin en tepesine koyariz ( cunku stack islemler stack uzerinden gidiyor... )
-                printStack(vm, vm->pc, 0);
+                printStack(vm, vm->pc, FALSE);
                 break;
             case STORE_PARAM:                   // lokal bir degeri ya da fonksiyon parametresinin degerini global data alaninda sakla
                 v = S_POP(vm);                  // stackin en tepesindeki degeri okuruz
@@ -209,7 +212,7 @@ void runVM(C42VM* vm){
                                   // ... cagrilacak metodu bu 2 parametre cagrilan metod sonrasi temizlenmeli aksi takdirde programin stackinde kalir
                                   // ... ve gereksiz yer isgal eder ve ayrica programin akisinin bozulmasina neden olur
                 vm->pc = addr;    // ... program adim degerini fonksiyonun adresi ile guncelleriz ( yani teknik olarak cagirmis oluyoruz bu sayede sihir gibi di mi ? )
-                printStack(vm, vm->pc, 0);
+                printStack(vm, vm->pc, FALSE);
                 break;
             case RETURN:
                 rval = S_POP(vm);       // stackin en tepesinde geri donulecek deger vardir ve bunu okuruz
@@ -223,7 +226,7 @@ void runVM(C42VM* vm){
                 temp = S_POP(vm);              // ... stack adim degerini parametre adedi kadar geri iteriz ...
                 S_PUSH(vm, rval);     // ... donulecek degeri stacke pushlariz ( kodu biz yazdigimiz icin stackteki bu geri donus degerinin yonetimiz bizde yani ihtiyac duymuyorsak mutlaka stackten cikarmaliyiz yoksa sonraki islemlerde karisikliga neden olur )
                 printf("RETURN rval -> %d vm->sp -> %d vm->fp -> %d argc -> %d\n", rval, vm->sp, vm->fp, argc);
-                printStack(vm, vm->pc, 0);
+                printStack(vm, vm->pc, FALSE);
                 break;
             case POP:
                 --vm->sp;      // stacki 1 geri iter ve o anki deger ne ise gormezden gelinir
@@ -232,7 +235,7 @@ void runVM(C42VM* vm){
                 v = S_POP(vm);        // stackin en tepesindeki degeri okuruz
                 printf("PRINT v -> %d\n", v);  // ... ve ekrana bastiririz
                 S_PUSH(vm, v);
-                printStack(vm, vm->pc, 0);
+                printStack(vm, vm->pc, FALSE);
                 break;
             default:
                 break;
