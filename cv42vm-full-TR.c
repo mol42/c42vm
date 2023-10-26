@@ -6,6 +6,7 @@
 //
 
 #include <stdio.h>
+#include <stdlib.h>
 
 // ONEMLI NOT :
 // BU SANAL ISLEMCI SADECE INTEGER SAYILARLA ISLEM YAPMAK UZERE
